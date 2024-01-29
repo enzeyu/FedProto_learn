@@ -47,9 +47,9 @@ def FedProto_taskheter(args, train_dataset, test_dataset, user_groups, user_grou
     # 训练损失，训练精度
     train_loss, train_accuracy = [], []
 
-    # 按照轮数循环
+    # 按照轮数循环，设置轮数为100
     for round in tqdm(range(args.rounds)):
-        # 局部权重，全局损失，局部原型，存储1轮里20个客户端的 局部权重、局部损失、局部损失
+        # 局部权重，局部损失，局部原型，存储1轮里20个客户端的 局部权重、局部损失、局部原型
         local_weights, local_losses, local_protos = [], [], {}
         print(f'\n | Global Training Round : {round + 1} |\n')
 
@@ -59,7 +59,7 @@ def FedProto_taskheter(args, train_dataset, test_dataset, user_groups, user_grou
             # 实例化LocalUpdate对象，位于update.py里
             # user_groups是一个字典，传入idx可以获得对应500个数据的索引（以CIFAR10为例）
             local_model = LocalUpdate(args=args, dataset=train_dataset, idxs=user_groups[idx])
-            # 局部模型更新权重
+            # 局部模型更新权重，获得每个用户的原型
             w, loss, acc, protos = local_model.update_weights_het(args, idx, global_protos, model=copy.deepcopy(local_model_list[idx]), global_round=round)
             # 对原型进行汇聚，最终输出一个字典，即一个类对应一个proto
             agg_protos = agg_func(protos)
@@ -74,7 +74,7 @@ def FedProto_taskheter(args, train_dataset, test_dataset, user_groups, user_grou
             summary_writer.add_scalar('Train/Loss1/user' + str(idx + 1), loss['1'], round)
             summary_writer.add_scalar('Train/Loss2/user' + str(idx + 1), loss['2'], round)
             summary_writer.add_scalar('Train/Acc/user' + str(idx + 1), acc, round)
-            # 记录客户端idx对应的原型损失
+            # 记录客户端idx对应的原型损失，累加到proto_loss
             proto_loss += loss['2']
 
         # update global weights
@@ -88,7 +88,7 @@ def FedProto_taskheter(args, train_dataset, test_dataset, user_groups, user_grou
             local_model_list[idx] = local_model
 
         # update global weights
-        # 原型聚合，将所有客户端对应的所有原型进行聚合
+        # 原型聚合，将所有客户端对应的所有local_protos进行聚合
         global_protos = proto_aggregation(local_protos)
 
         # 计算平均损失，即20个客户端在一轮的平均损失

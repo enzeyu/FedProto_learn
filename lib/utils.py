@@ -224,8 +224,11 @@ def agg_func(protos):
 
     return protos
 
+# 传入的是局部proto列表
 def proto_aggregation(local_protos_list):
+    # 初始化汇总的proto列表
     agg_protos_label = dict()
+    # 取所有客户端idx，获得
     for idx in local_protos_list:
         local_protos = local_protos_list[idx]
         for label in local_protos.keys():

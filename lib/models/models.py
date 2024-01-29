@@ -126,7 +126,9 @@ class Lenet(nn.Module):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = x.view(-1, 64 * 5 * 5)
+        # 经过fc1后的输出即为proto，维度为384维
         x1 = F.relu(self.fc1(x))
+        # 全输出
         x = F.relu(self.fc2(x1))
         x = self.fc3(x)
 

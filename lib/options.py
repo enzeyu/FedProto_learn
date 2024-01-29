@@ -10,6 +10,7 @@ def args_parser():
     parser = argparse.ArgumentParser()
 
     # federated arguments (Notation for the arguments followed from paper)
+    # 训练的轮数
     parser.add_argument('--rounds', type=int, default=100,
                         help="number of rounds of training")
     parser.add_argument('--num_users', type=int, default=20,

@@ -9,6 +9,7 @@ import copy
 import numpy as np
 from models import CNNFemnist
 
+# 抽象类做数据分割
 class DatasetSplit(Dataset):
     """An abstract Dataset class wrapped around Pytorch Dataset class.
     """
@@ -138,9 +139,11 @@ class LocalUpdate(object):
         # Set mode to train model
         # 设置训练模式
         model.train()
+        # 对应文章的三类损失
         epoch_loss = {'total':[],'1':[], '2':[], '3':[]}
 
         # Set optimizer for the local updates
+        # 设置optimizer
         if self.args.optimizer == 'sgd':
             optimizer = torch.optim.SGD(model.parameters(), lr=self.args.lr,
                                         momentum=0.5)
@@ -150,6 +153,7 @@ class LocalUpdate(object):
 
         # epoch循环
         for iter in range(self.args.train_ep):
+            # 记录同一个batch下的batch_loss
             batch_loss = {'total':[],'1':[], '2':[], '3':[]}
             # 长度为类的数目，是若干列表，一个列表对应一个类，每个列表包含了当前客户端所有对应类的原型
             agg_protos_label = {}
@@ -195,6 +199,7 @@ class LocalUpdate(object):
                         agg_protos_label[label_g[i].item()] = [protos[i,:]]
 
                 # 取所有类的预测概率，找到最大的为y_hat，然后看平均精度，acc_val为一个batch下数据的平均精度
+                # 取出前num_classes列
                 log_probs = log_probs[:, 0:args.num_classes]
                 _, y_hat = log_probs.max(1)
                 acc_val = torch.eq(y_hat, labels.squeeze()).float().mean()
@@ -305,33 +310,37 @@ class LocalTest(object):
 
         return model.state_dict()
 
-
+# 返回测试精度
 def test_inference(args, model, test_dataset, global_protos):
     """ Returns the test accuracy and loss.
     """
-
+    # 定义loss，总数，总正确个数
     model.eval()
     loss, total, correct = 0.0, 0.0, 0.0
 
+    # 将损失函数放到设备上，定义testloader
     device = args.device
     criterion = nn.NLLLoss().to(device)
     testloader = DataLoader(test_dataset, batch_size=128,
                             shuffle=False)
 
+    # 枚举一个batch
     for batch_idx, (images, labels) in enumerate(testloader):
         images, labels = images.to(device), labels.to(device)
 
         # Inference
+        # 正常的推理
         outputs, protos = model(images)
         batch_loss = criterion(outputs, labels)
         loss += batch_loss.item()
 
         # Prediction
+        # 获得预测标签，将其设置为一维，再并进行对比
         _, pred_labels = torch.max(outputs, 1)
         pred_labels = pred_labels.view(-1)
         correct += torch.sum(torch.eq(pred_labels, labels)).item()
         total += len(labels)
-
+    # 获得测试精度和损失
     accuracy = correct/total
     return accuracy, loss
 
@@ -427,43 +436,58 @@ def test_inference_new_cifar(args, local_model_list, test_dataset, classes_list,
 def test_inference_new_het(args, local_model_list, test_dataset, global_protos=[]):
     """ Returns the test accuracy and loss.
     """
+    # 损失，总数，正确个数
     loss, total, correct = 0.0, 0.0, 0.0
+    # 定义损失函数
     loss_mse = nn.MSELoss()
 
     device = args.device
     testloader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
     cnt = 0
+    # 遍历每个batch
     for batch_idx, (images, labels) in enumerate(testloader):
         images, labels = images.to(device), labels.to(device)
         prob_list = []
+        # 定义原型列表，获得当前batch样本在所有模型上计算的原型
         protos_list = []
+        # 枚举用户
         for idx in range(args.num_users):
             images = images.to(args.device)
             model = local_model_list[idx]
+            # 对于同一个batch，让每个客户端获得这个batch的protos
             _, protos = model(images)
             protos_list.append(protos)
 
+        # 行是batch里样本数目，列是一个proto的维数
         ensem_proto = torch.zeros(size=(images.shape[0], protos.shape[1])).to(device)
         # protos ensemble
+        # 遍历当前batch在所有客户端的原型，然后累加起来获得ensem_proto
         for protos in protos_list:
             ensem_proto += protos
+        # 除以用户数，获得平均原型
         ensem_proto /= len(protos_list)
 
         a_large_num = 100
+        # 获得形状为64*10的全1向量，然后将距离初始化为100
         outputs = a_large_num * torch.ones(size=(images.shape[0], 10)).to(device)  # outputs 64*10
+        # i从0到63，j从0到9，如果某个类有全局原型，则计算
         for i in range(images.shape[0]):
             for j in range(10):
                 if j in global_protos.keys():
                     dist = loss_mse(ensem_proto[i,:],global_protos[j][0])
+                    # 计算当前batch第i个样本和第j个原型的距离
                     outputs[i,j] = dist
 
         # Prediction
+        # 获得最小的距离，得到pred_labels
         _, pred_labels = torch.min(outputs, 1)
+        # 将pred_labels展为1维
         pred_labels = pred_labels.view(-1)
+        # 获得正确的和总数
         correct += torch.sum(torch.eq(pred_labels, labels)).item()
         total += len(labels)
-
+    # 计算精度
     acc = correct/total
 
     return acc
